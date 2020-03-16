@@ -1,0 +1,8 @@
+# Downloaded datasets
+data
+
+# Figures
+Figures/*
+
+# pycache
+__pycache__
