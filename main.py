@@ -1,9 +1,6 @@
 """ Following this tutorial: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
 CelebA cannot be downloaded anymore, so I am currently using the dataset we will use. """
 
-import argparse
-import os
-import random
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -16,29 +13,21 @@ import torchvision.utils as vutils
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from generator import *
-from discriminator import *
+import generator as gen
+import discriminator as disc
 
 # custom weights initialization called on netG and netD
 def weights_init(m):
-	"""Takes a network and reinitializes the conv and batchnorm layers."""
-	classname = m.__class__.__name__
-	if classname.find('Conv') != -1:
-		nn.init.normal_(m.weight.data, 0.0, 0.02)
-	elif classname.find('BatchNorm') != -1:
-		nn.init.normal_(m.weight.data, 1.0, 0.02)
-		nn.init.constant_(m.bias.data, 0)
+    """Takes a network and reinitializes the conv and batchnorm layers."""
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
 
 # Reproduction purposes
-torch.manual_seed(0) 
-
-# Get the dataset
-
-# If CUDA is available, we will use it (GPU is much faster than CPU)
-device = torch.device("cpu")
-print(f"CUDA is available: {torch.cuda.is_available()}")
-if torch.cuda.is_available():
-	device = torch.device("cuda")
+torch.manual_seed(0)
 
 # Tuning parameters (as described in the tutorial)
 # Root directory for dataset
@@ -59,13 +48,17 @@ ngf = 64
 # Size of feature maps in discriminator
 ndf = 64
 # Number of training epochs
-num_epochs = 50
+num_epochs = 25
 # Learning rate for optimizers
 lr = 0.0002
 # Beta1 hyperparam for Adam optimizers
 beta1 = 0.5
 # Number of GPUs available. Use 0 for CPU mode.
 ngpu = 1
+
+# If CUDA is available, we will use it (GPU is much faster than CPU)
+print(f"CUDA is available: {torch.cuda.is_available()}")
+device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 
 
 # We can use an image folder dataset the way we have it setup.
@@ -82,7 +75,6 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                          shuffle=True, num_workers=workers)
 
 # Decide which device we want to run on
-device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 
 # Plot some training images
 # real_batch = next(iter(dataloader))
@@ -93,7 +85,7 @@ device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else 
 # plt.show()
 
 # Create the generator
-netG = Generator(ngpu, ngf, nc, nz).to(device)
+netG = gen.Generator(ngpu, ngf, nc, nz).to(device)
 
 # Handle multi-gpu if desired
 if (device.type == 'cuda') and (ngpu > 1):
@@ -107,7 +99,7 @@ netG.apply(weights_init)
 print(netG)
 
 # Create the Discriminator
-netD = Discriminator(ngpu, ndf, nc).to(device)
+netD = disc.Discriminator(ngpu, ndf, nc).to(device)
 
 # Handle multi-gpu if desired
 if (device.type == 'cuda') and (ngpu > 1):
@@ -219,16 +211,16 @@ for epoch in range(num_epochs):
 
         iters += 1
 
-plt.figure(figsize=(10,5))
+plt.figure(figsize=(10, 5))
 plt.title("Generator and Discriminator Loss During Training")
-plt.plot(G_losses,label="G")
-plt.plot(D_losses,label="D")
+plt.plot(G_losses, label="G")
+plt.plot(D_losses, label="D")
 plt.xlabel("iterations")
 plt.ylabel("Loss")
 plt.legend()
 plt.show()
 
-fig = plt.figure(figsize=(8,8))
+fig = plt.figure(figsize=(8, 8))
 plt.axis("off")
 ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
 ani = animation.ArtistAnimation(fig, ims, interval=500, repeat_delay=500, blit=True)

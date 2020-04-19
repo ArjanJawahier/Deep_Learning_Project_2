@@ -6,7 +6,13 @@ This is thus a dependency.
 To install PyTorch, you can use the package manager pip:
 
 ```bash
-pip install torch torchvision
+pip install torch===1.4.0 torchvision===0.5.0 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+## Other dependencies currently used
+We are also using matplotlib, which can be installed using the command:
+```bash
+pip install matplotlib
 ```
 
 ## Dataset
