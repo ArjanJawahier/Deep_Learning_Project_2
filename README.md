@@ -26,7 +26,7 @@ The following tutorials and documents can be read to understand what to do.
 2) [A lot of documentation and examples of GANs (highly recommended)](https://github.com/nashory/gans-awesome-applications)
 3) [Style Transfer paper](https://arxiv.org/pdf/1703.07511.pdf)
 4) [CycleGAN paper](https://arxiv.org/pdf/1703.10593.pdf) - We are implementing this
-5) [ResNet paper](https://arxiv.org/pdf/1512.03385.pdf)
+5) [ResNet paper](https://arxiv.org/pdf/1512.03385.pdf) - This is what our Generators will consist of.
 
 ## Discriminator
 The discriminator coded in discriminator.py is trying to classify input images as either real or fake. When we want to transfer a style (e.g. Van Gogh) to another image (e.g. your house), the discriminator will compare the generated image of your house with the Van Gogh style to real Van Gogh images. The goal is for the discriminator to essentially randomly guess whether an image is real or fake (p = 0.5).
