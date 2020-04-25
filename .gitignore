@@ -1,5 +1,7 @@
 # Downloaded datasets
 data/*
+celeba_dataroot
+data_per_painter
 
 # Figures
 Figures/*

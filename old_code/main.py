@@ -1,6 +1,7 @@
 """ Following this tutorial: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
 CelebA cannot be downloaded anymore, so I am currently using the dataset we will use. """
 
+import PIL
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -31,11 +32,12 @@ torch.manual_seed(0)
 
 # Tuning parameters (as described in the tutorial)
 # Root directory for dataset
-dataroot = "data/resized"
+dataroot = "data_per_painter/Vincent_van_Gogh"
+
 # Number of workers for dataloader
 workers = 2
 # Batch size during training
-batch_size = 128
+batch_size = 64
 # Spatial size of training images. All images will be resized to this
 #   size using a transformer.
 image_size = 64
@@ -45,10 +47,12 @@ nc = 3
 nz = 100
 # Size of feature maps in generator
 ngf = 64
+
 # Size of feature maps in discriminator
-ndf = 64
+ndf = ngf/4 # As proposed in https://github.com/pytorch/examples/issues/70
+
 # Number of training epochs
-num_epochs = 25
+num_epochs = 100
 # Learning rate for optimizers
 lr = 0.0002
 # Beta1 hyperparam for Adam optimizers
@@ -70,6 +74,7 @@ dataset = dset.ImageFolder(root=dataroot,
                                transforms.ToTensor(),
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
+
 # Create the dataloader
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                          shuffle=True, num_workers=workers)
@@ -83,41 +88,39 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
 # plt.title("Training Images")
 # plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)))
 # plt.show()
+# exit()
 
 # Create the generator
 netG = gen.Generator(ngpu, ngf, nc, nz).to(device)
-
 # Handle multi-gpu if desired
 if (device.type == 'cuda') and (ngpu > 1):
     netG = nn.DataParallel(netG, list(range(ngpu)))
-
 # Apply the weights_init function to randomly initialize all weights
 #  to mean=0, stdev=0.2.
 netG.apply(weights_init)
 
-# Print the model
-print(netG)
-
 # Create the Discriminator
 netD = disc.Discriminator(ngpu, ndf, nc).to(device)
-
 # Handle multi-gpu if desired
 if (device.type == 'cuda') and (ngpu > 1):
     netD = nn.DataParallel(netD, list(range(ngpu)))
-
 # Apply the weights_init function to randomly initialize all weights
 #  to mean=0, stdev=0.2.
 netD.apply(weights_init)
 
-# Print the model
+# Print the models
+print(netG)
 print(netD)
 
 # Initialize BCELoss function
-criterion = nn.BCELoss()
+loss_func = nn.BCELoss()
 
 # Create batch of latent vectors that we will use to visualize
 #  the progression of the generator
 fixed_noise = torch.randn(image_size, nz, 1, 1, device=device)
+
+# fixed_noise_image = transforms.ToPILImage()(fixed_noise.cpu().reshape(64, 64, 1)).convert("RGB")
+# fixed_noise_image.show()
 
 # Establish convention for real and fake labels during training
 real_label = 1
@@ -155,7 +158,7 @@ for epoch in range(num_epochs):
         # Forward pass real batch through D
         output = netD(real_cpu).view(-1)
         # Calculate loss on all-real batch
-        errD_real = criterion(output, label)
+        errD_real = loss_func(output, label)
         # Calculate gradients for D in backward pass
         errD_real.backward()
         D_x = output.mean().item()
@@ -169,7 +172,7 @@ for epoch in range(num_epochs):
         # Classify all fake batch with D
         output = netD(fake.detach()).view(-1)
         # Calculate D's loss on the all-fake batch
-        errD_fake = criterion(output, label)
+        errD_fake = loss_func(output, label)
         # Calculate the gradients for this batch
         errD_fake.backward()
         D_G_z1 = output.mean().item()
@@ -186,7 +189,7 @@ for epoch in range(num_epochs):
         # Since we just updated D, perform another forward pass of all-fake batch through D
         output = netD(fake).view(-1)
         # Calculate G's loss based on this output
-        errG = criterion(output, label)
+        errG = loss_func(output, label)
         # Calculate gradients for G
         errG.backward()
         D_G_z2 = output.mean().item()
@@ -196,7 +199,7 @@ for epoch in range(num_epochs):
         # Output training stats
         if i % 25 == 0:
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                  % (epoch, num_epochs, i, len(dataloader),
+                  % (epoch+1, num_epochs, i, len(dataloader),
                      errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
         # Save Losses for plotting later
@@ -204,13 +207,20 @@ for epoch in range(num_epochs):
         D_losses.append(errD.item())
 
         # Check how the generator is doing by saving G's output on fixed_noise
-        if (iters % 25 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
+        if (iters % 50 == 0) or (i == len(dataloader)-1):
+            print(i, len(dataloader))
             with torch.no_grad():
                 fake = netG(fixed_noise).detach().cpu()
-            img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
+            grid_of_fakes = vutils.make_grid(fake, padding=2, normalize=True)
+            img_list.append(grid_of_fakes)
 
         iters += 1
 
+# Save the last grid image made to a png file
+fake_im = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
+fake_im.save("test_results/latest_test_result.png", "PNG") 
+
+# Make figure that shows the loss curves
 plt.figure(figsize=(10, 5))
 plt.title("Generator and Discriminator Loss During Training")
 plt.plot(G_losses, label="G")
@@ -220,8 +230,9 @@ plt.ylabel("Loss")
 plt.legend()
 plt.show()
 
+# Make animation of grid images
 fig = plt.figure(figsize=(8, 8))
 plt.axis("off")
 ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
-ani = animation.ArtistAnimation(fig, ims, interval=500, repeat_delay=500, blit=True)
+ani = animation.ArtistAnimation(fig, ims, interval=250, repeat_delay=2500, blit=True)
 plt.show()
