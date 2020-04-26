@@ -4,15 +4,13 @@
 ## CycleGAN paper: https://arxiv.org/pdf/1703.10593.pdf
 
 # Todo-list:
-# 1) Get dataset of normal items.
-# 2) Make Generators A and B
-# 3) Make Discriminators A and B
-# 4) Compute loss with cycle consistency term + normal GAN loss, see paper!
+# 1) Figure out how to combine data from both dataloaders. Have a look at the CustomDataLoader of the authors
+# 2) Compute loss with cycle consistency term + normal GAN loss, see paper!
+# 3) Figure out how to test.
 
 # Program:
 # Load in dataset
-# Make G_A, G_B
-# Make D_A, G_B
+# Instantiate CycleGAN object, which has G_A, G_B, D_A, and D_B networks
 # Training Loop:
 # Train GANS together in training loop
 # Calculate loss
@@ -30,6 +28,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import PIL
+import os
 import itertools
 
 class Generator(nn.Module):
@@ -115,20 +114,20 @@ class Discriminator(nn.Module):
         nf_mult = 1
         nf_mult_prev = 1
         for i in range(1, num_layers):
-        	nf_mult_prev = nf_mult
-        	nf_mult = min(2 ** i, 8)
-        	self.model += [nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, 
-        							 kernel_size=kw, stride=2, padding=padw, bias=False),
-        				   nn.BatchNorm2d(ndf * nf_mult),
-        				   nn.LeakyReLU(0.2, True)]
+            nf_mult_prev = nf_mult
+            nf_mult = min(2 ** i, 8)
+            self.model += [nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, 
+                                     kernel_size=kw, stride=2, padding=padw, bias=False),
+                           nn.BatchNorm2d(ndf * nf_mult),
+                           nn.LeakyReLU(0.2, True)]
 
         nf_mult_prev = nf_mult
         nf_mult = min(2 ** num_layers, 8)
         self.model += [nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
-        						 kernel_size=kw, stride=1, padding=padw, bias=False),
-        			   nn.BatchNorm2d(ndf * nf_mult),
-        			   nn.LeakyReLU(0.2, True),
-        			   nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)] # 1 channel output
+                                 kernel_size=kw, stride=1, padding=padw, bias=False),
+                       nn.BatchNorm2d(ndf * nf_mult),
+                       nn.LeakyReLU(0.2, True),
+                       nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)] # 1 channel output
 
         self.model = nn.Sequential(*self.model)
 
@@ -137,21 +136,21 @@ class Discriminator(nn.Module):
 
 
 class LSGANLoss(nn.Module):
-	def __init__(self):
-		super(LSGANLoss, self).__init__()
-		self.loss = nn.MSELoss() # see LSGAN paper as to why
-		target_real_label = 1.0
-		target_fake_label = 0.0
-		self.register_buffer("real_label", torch.tensor(target_real_label))
-		self.register_buffer("fake_label", torch.tensor(target_fake_label))
+    def __init__(self):
+        super(LSGANLoss, self).__init__()
+        self.loss = nn.MSELoss() # see LSGAN paper as to why
+        target_real_label = 1.0
+        target_fake_label = 0.0
+        self.register_buffer("real_label", torch.tensor(target_real_label))
+        self.register_buffer("fake_label", torch.tensor(target_fake_label))
 
-	def __call__(self, prediction, target_is_real):
-		if target_is_real:
-			target_tensor = self.real_label.expand_as(prediction)
-		else:
-			target_tensor = self.fake_label.expand_as(prediction)
+    def __call__(self, prediction, target_is_real):
+        if target_is_real:
+            target_tensor = self.real_label.expand_as(prediction)
+        else:
+            target_tensor = self.fake_label.expand_as(prediction)
 
-		return self.loss(prediction, target_tensor)
+        return self.loss(prediction, target_tensor)
 
 
 class Options:
@@ -160,35 +159,44 @@ class Options:
         self.input_nc = 3       # num channels, usually 3 (RGB)
         self.output_nc = 3      # num channels, usually 3 (RGB)
         self.num_epochs = 5
-        self.lr = 0.0002		# Learning rate
-        self.beta1 = 0.5 		# beta1 parameter for the Adam optimizers
+        self.lr = 0.0002        # Learning rate
+        self.beta1 = 0.5        # beta1 parameter for the Adam optimizers
+        
+        self.workers = 2        # Number of workers for dataloader
+        self.batch_size = 64    # Batch size during training
+        self.image_size = 128   # Spatial size of training images.
+
 
 class CycleGAN:
-    def __init__(self, is_train):
-        self.opt = Options()        # Hardcoded options
+    def __init__(self, opt, is_train):
+        self.opt = opt
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.G_A = Generator(self.opt)
         self.G_B = Generator(self.opt)
 
         if is_train:
-        	# Only need discriminators at training time
-	        self.D_A = Discriminator(self.opt)
-	        self.D_B = Discriminator(self.opt)
-	        # Only need losses as training time
-        	self.criterionLSGAN = LSGANLoss().to(self.device)
-        	self.criterionCycle = nn.L1Loss()	# Cycle-consistency loss, see paper!
-        	# TODO: might want to test out identity loss as well.
+            # Only need discriminators at training time
+            self.D_A = Discriminator(self.opt)
+            self.D_B = Discriminator(self.opt)
+            # Only need losses as training time
+            self.criterionLSGAN = LSGANLoss().to(self.device)
+            self.criterionCycle = nn.L1Loss()   # Cycle-consistency loss, see paper!
+            # TODO: might want to test out identity loss as well.
 
-        	self.optimizer_G = optim.Adam(itertools.chain(self.G_A.parameters(), self.G_B.parameters()),
-        								  lr=self.opt.lr, betas=(self.opt.beta1, 0.999))
-        	self.optimizer_D = optim.Adam(itertools.chain(self.D_A.parameters(), self.D_B.parameters()),
-        								  lr=self.opt.lr, betas=(self.opt.beta1, 0.999))
+            self.optimizer_G = optim.Adam(itertools.chain(self.G_A.parameters(), self.G_B.parameters()),
+                                          lr=self.opt.lr, betas=(self.opt.beta1, 0.999))
+            self.optimizer_D = optim.Adam(itertools.chain(self.D_A.parameters(), self.D_B.parameters()),
+                                          lr=self.opt.lr, betas=(self.opt.beta1, 0.999))
+
 
     def train(self):
         pass
 
     def test(self):
-        pass
+        # We do not need to calculate gradients during test time, as we are not updating the weights
+        with torch.no_grad():
+            self.forward()
+
 
     def forward(self, x):
         # call forward methods in both generators and discriminators
@@ -200,7 +208,40 @@ class CycleGAN:
 if __name__ == "__main__":
     print("This program is still in the making.")
     print("Instantiating CycleGAN clone... ")
-    cycle_gan = CycleGAN(is_train=True)
-    print(cycle_gan.opt)
-    print(cycle_gan.D_A)
-    print(cycle_gan.D_B)
+    opt = Options()        # Hardcoded options
+    cycle_gan = CycleGAN(opt, is_train=True)
+
+    # Image transforms
+    transform = transforms.Compose([transforms.Resize(opt.image_size),
+                                    transforms.CenterCrop(opt.image_size),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   ])
+
+    dataroot_A = f"{os.getcwd()}/data_per_painter/Pablo_Picasso"
+    dataroot_B = f"{os.getcwd()}/data_per_painter/Vincent_van_Gogh"
+
+    if os.path.exists(dataroot_A) and os.path.exists(dataroot_B):
+        # Create the datasets
+        dataset_A = dset.ImageFolder(root=dataroot_A, transform=transform)
+        dataset_B = dset.ImageFolder(root=dataroot_B, transform=transform)
+
+        # Create the dataloaders
+        dataloader_A = torch.utils.data.DataLoader(dataset_A, batch_size=opt.batch_size,
+                                                   shuffle=True, num_workers=opt.workers)
+        dataloader_B = torch.utils.data.DataLoader(dataset_B, batch_size=opt.batch_size,
+                                                   shuffle=True, num_workers=opt.workers)
+    else:
+        error_cause = dataroot_A if not os.path.exists(dataroot_A) else dataroot_B
+        print("ERROR: " + error_cause + " does not exist or you do not have permission to open this file.")
+        exit()
+
+    # TODO: Figure out how to combine data from the dataloaders
+    for epoch in range(opt.num_epochs):
+        for i, data in enumerate(dataloader_A):
+            pass
+        for i, data in enumerate(dataloader_B):
+            pass
+    # TODO: rest of training loop
+
+    print("Program finished without errors!")
