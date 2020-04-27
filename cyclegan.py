@@ -42,42 +42,42 @@ class Generator(nn.Module):
         ngf = 64           # Hardcoded, num filters in last conv layer
 
         # The ReflectionPad2d layer pads the input tensor. The value is 3 because we use a 7x7 conv layer
-        self.model = [nn.ReflectionPad2d(3),
-                      nn.Conv2d(opt.input_nc, ngf, kernel_size=7, padding=0, bias=False),
-                      nn.BatchNorm2d(ngf),
-                      nn.ReLU(True)]
+        self.layers = [nn.ReflectionPad2d(3),
+                       nn.Conv2d(opt.input_nc, ngf, kernel_size=7, padding=0, bias=False),
+                       nn.BatchNorm2d(ngf),
+                       nn.ReLU(True)]
 
         # Add downsampling layers (see CycleGAN implementation by the authors)
         n_downsampling_layers = 2
         for i in range(n_downsampling_layers):
             mult = 2 ** i
-            self.model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=False),
-                           nn.BatchNorm2d(ngf * mult * 2),
-                           nn.ReLU(True)]
+            self.layers += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=False),
+                            nn.BatchNorm2d(ngf * mult * 2),
+                            nn.ReLU(True)]
 
         # Add ResNet blocks
         mult = 2 ** n_downsampling_layers
         for i in range(self.n_blocks):
-            self.model += [ResnetBlock(ngf, mult)] # see https://arxiv.org/pdf/1512.03385.pdf
+            self.layers += [ResnetBlock(ngf, mult)] # see https://arxiv.org/pdf/1512.03385.pdf
 
         # Add upsampling layers
         for i in range(n_downsampling_layers):
             mult = 2 ** (n_downsampling_layers - i)
-            self.model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
+            self.layers += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2),
                                               kernel_size=3, stride=2,
                                               padding=1, output_padding=1,
                                               bias=False),
                            nn.BatchNorm2d(int(ngf * mult / 2)),
                            nn.ReLU(True)]
 
-        self.model += [nn.ReflectionPad2d(3),   # The value is 3 because we use a 7x7 conv layer
+        self.layers += [nn.ReflectionPad2d(3),   # The value is 3 because we use a 7x7 conv layer
                        nn.Conv2d(ngf, opt.output_nc, kernel_size=7, padding=0), # todo: understand why this conv2d is here and not convtranspose2d
                        nn.Tanh()]
 
-        self.model = nn.Sequential(*self.model)
+        self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        self.model(x)
+        return self.model(x)
 
 
 class ResnetBlock(nn.Module):
@@ -134,6 +134,10 @@ class Discriminator(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+    def set_requires_grad(self, flag):
+        for parameter in self.parameters():
+            parameter.requires_grad = flag
+
 
 class LSGANLoss(nn.Module):
     def __init__(self):
@@ -156,32 +160,48 @@ class LSGANLoss(nn.Module):
 class Options:
     """A class that keeps track of all user-defined options"""
     def __init__(self):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = "cpu"
+        print("Keep in mind! Options.device is now cpu by default, as cuda results in OOM error.")
+
         self.input_nc = 3       # num channels, usually 3 (RGB)
         self.output_nc = 3      # num channels, usually 3 (RGB)
         self.num_epochs = 5
         self.lr = 0.0002        # Learning rate
         self.beta1 = 0.5        # beta1 parameter for the Adam optimizers
-        
+
+        # lambda parameter (how much more important 
+        #is the cycle-consistency loss compared to the normal GAN loss)
+        self.lambda_ = 10       
+
+
         self.workers = 2        # Number of workers for dataloader
-        self.batch_size = 64    # Batch size during training
+        self.batch_size = 1    # Batch size during training
         self.image_size = 128   # Spatial size of training images.
 
 
 class CycleGAN:
     def __init__(self, opt, is_train):
         self.opt = opt
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.G_A = Generator(self.opt)
-        self.G_B = Generator(self.opt)
+        self.device = opt.device
+        self.G_A = Generator(self.opt).to(self.device)
+        self.G_B = Generator(self.opt).to(self.device)
+
+        self.real_A = None # Input Data from domain A
+        self.real_B = None # Input Data from domain B
+        self.fake_A = None # Generated Data domain B -> A
+        self.fake_B = None # Generated Data domain A -> B
+        self.reconstructed_A = None # Generated Data from A -> B -> A
+        self.reconstructed_B = None # Generated Data from B -> A -> B
 
         if is_train:
             # Only need discriminators at training time
-            self.D_A = Discriminator(self.opt)
-            self.D_B = Discriminator(self.opt)
-            # Only need losses as training time
-            self.criterionLSGAN = LSGANLoss().to(self.device)
+            self.D_A = Discriminator(self.opt).to(self.device)
+            self.D_B = Discriminator(self.opt).to(self.device)
+            # Only need losses during training time
+            self.criterionLSGAN = LSGANLoss().to(self.device) # TODO: see why .to(self.device) does not work)
             self.criterionCycle = nn.L1Loss()   # Cycle-consistency loss, see paper!
-            # TODO: might want to test out identity loss as well.
+            # TODO?: might want to test out identity loss as well.
 
             self.optimizer_G = optim.Adam(itertools.chain(self.G_A.parameters(), self.G_B.parameters()),
                                           lr=self.opt.lr, betas=(self.opt.beta1, 0.999))
@@ -190,7 +210,47 @@ class CycleGAN:
 
 
     def train(self):
-        pass
+        """Following the implementation of the authors of CycleGAN,
+        the discriminators don't need gradients while training G_A and G_B.
+        """
+        self.forward()
+
+        # Train the Generators
+
+        self.D_A.set_requires_grad(False)
+        self.D_B.set_requires_grad(False)
+        self.optimizer_G.zero_grad()  # set G_A and G_B's gradients to zero        
+        lambda_ = self.opt.lambda_
+        LSGANloss_A = self.criterionLSGAN(self.D_A(self.fake_B), True)           # LSGAN loss for GAN A
+        LSGANloss_B = self.criterionLSGAN(self.D_B(self.fake_A), True)           # LSGAN loss for GAN B
+        cycleloss_A = self.criterionCycle(self.reconstructed_A, self.real_A) * lambda_  # Forward cycle loss || G_B(G_A(A)) - A||
+        cycleloss_B = self.criterionCycle(self.reconstructed_B, self.real_B) * lambda_  # Backward cycle loss || G_A(G_B(B)) - B||
+        loss_G = LSGANloss_A + LSGANloss_B + cycleloss_A + cycleloss_B     # combined loss and calculate gradients
+        loss_G.backward()
+        self.optimizer_G.step()       # update G_A and G_B's weights
+
+        # Train the Discriminators
+        self.D_A.set_requires_grad(True)
+        self.D_B.set_requires_grad(True)
+        self.optimizer_D.zero_grad()   # set D_A and D_B's gradients to zero
+
+        # D_A Loss and gradient calculations
+        D_A_pred_real = self.D_A(self.real_B)
+        loss_D_A_real = self.criterionLSGAN(D_A_pred_real, True)
+        D_A_pred_fake = self.D_A(self.fake_B.detach())
+        loss_D_A_fake = self.criterionLSGAN(D_A_pred_fake, False)
+        loss_D_A = (loss_D_A_real + loss_D_A_fake) * 0.5
+        loss_D_A.backward()
+        # D_B Loss and gradient calculations
+        D_B_pred_real = self.D_B(self.real_A)
+        loss_D_B_real = self.criterionLSGAN(D_B_pred_real, True)
+        D_B_pred_fake = self.D_B(self.fake_A.detach())
+        loss_D_B_fake = self.criterionLSGAN(D_B_pred_fake, False)
+        loss_D_B = (loss_D_B_real + loss_D_B_fake) * 0.5
+        loss_D_B.backward() # TODO: find out why you can use backward twice here. Isn't the gradient wrong?
+
+        self.optimizer_D.step()  # update D_A and D_B's weights
+        
 
     def test(self):
         # We do not need to calculate gradients during test time, as we are not updating the weights
@@ -198,9 +258,13 @@ class CycleGAN:
             self.forward()
 
 
-    def forward(self, x):
+    def forward(self):
         # call forward methods in both generators and discriminators
-        pass
+        self.fake_B = self.G_A(self.real_A)            # G_A(A)
+        self.reconstructed_A = self.G_B(self.fake_B)   # G_B(G_A(A))
+        self.fake_A = self.G_B(self.real_B)            # G_B(B)
+        self.reconstructed_B = self.G_A(self.fake_A)   # G_A(G_B(B))
+
 
     def backward(self):
         pass
@@ -236,12 +300,32 @@ if __name__ == "__main__":
         print("ERROR: " + error_cause + " does not exist or you do not have permission to open this file.")
         exit()
 
-    # TODO: Figure out how to combine data from the dataloaders
+    fixed_images = dataset_A.__getitem__(0)[0].to(opt.device)
+    fixed_images = torch.reshape(fixed_images, (1, 3, 128, 128))
+    img_list = []   # We'll use this to visualize the progress of the GAN
     for epoch in range(opt.num_epochs):
-        for i, data in enumerate(dataloader_A):
-            pass
-        for i, data in enumerate(dataloader_B):
-            pass
-    # TODO: rest of training loop
+        # Get data from both dataloaders and give it to the cycleGAN
+        for i, data in enumerate(zip(dataloader_A, dataloader_B)):
+            data_A, data_B = data
+            cycle_gan.real_A = data_A[0].to(opt.device)
+            cycle_gan.real_B = data_B[0].to(opt.device)
+            cycle_gan.train()
+            
+        # Visualize the progress of the CycleGAN by saving G_A's output on images from dataset_A
+        with torch.no_grad():
+            fake = cycle_gan.G_A(fixed_images).detach().cpu()
+        grid_of_fakes = vutils.make_grid(fake, padding=2, normalize=True)
+        img_list.append(grid_of_fakes)
 
+
+    # Save the last grid image made to a png file
+    fake_im = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
+    fake_im.save("test_results/latest_test_result.png", "PNG")
+
+    # Make animation of grid images
+    fig = plt.figure(figsize=(8, 8))
+    plt.axis("off")
+    ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
+    ani = animation.ArtistAnimation(fig, ims, interval=500, repeat_delay=500, blit=True)
+    plt.show()
     print("Program finished without errors!")
