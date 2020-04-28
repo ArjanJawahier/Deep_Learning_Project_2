@@ -18,8 +18,10 @@ for f in os.listdir(imagedir):
 
 for painter in painters:
 	# make new directories for each painter
-	painterdir = new_imagedir+"/"+str(painter)+"/train/"
+	painterdir = new_imagedir+"/"+str(painter)
 	if painter not in os.listdir(new_imagedir):
+		os.mkdir(painterdir)
+		painterdir = painterdir+"/train"	
 		os.mkdir(painterdir)
 
 	# cp all files with name into the newly made dir with that name
