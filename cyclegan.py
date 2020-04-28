@@ -342,15 +342,23 @@ if __name__ == "__main__":
         torch.save(cycle_gan.G_B,"gen_B.pt")
     
     else:
-        if sys.argv[2] == "a":
-            model = torch.load("gen_A.pt")
-        elif sys.argv[2] == "b":
-            model = torch.load("gen_B.pt")
+        if sys.argv[2] != None and sys.argv[3] != None:
+            if sys.argv[2] == "a":
+                model = torch.load("gen_A.pt")
+            elif sys.argv[2] == "b":
+                model = torch.load("gen_B.pt")
+            else:
+                print("Choose either a or b as argument")
+                exit(0)
+            try:
+                original_img = PIL.Image.open(sys.argv[3])
+            except:
+                print("File not found or unable to open")
+                exit(0)
         else:
             print("Specify model as argument")
             exit(0)
 
-        original_img = PIL.Image.open("./cnn_data/dancing.jpg")
         original_img = transform(original_img)
         original_img = torch.reshape(original_img,(1, 3, 128, 128))
 
