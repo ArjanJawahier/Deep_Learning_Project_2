@@ -304,6 +304,7 @@ if __name__ == "__main__":
     fixed_images = torch.reshape(fixed_images, (1, 3, 128, 128))
     img_list = []   # We'll use this to visualize the progress of the GAN
     for epoch in range(opt.num_epochs):
+        print("Epoch {} of {}".format(epoch,opt.num_epochs))
         # Get data from both dataloaders and give it to the cycleGAN
         for i, data in enumerate(zip(dataloader_A, dataloader_B)):
             data_A, data_B = data

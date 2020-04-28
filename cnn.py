@@ -16,17 +16,17 @@ import copy
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # desired size of the output image
-imsize = 512 if torch.cuda.is_available() else 128  # use small size if no gpu
+imsize = 128
 
-loader = transforms.Compose([
-	transforms.Resize(imsize),  # scale imported image
-	transforms.ToTensor()])  # transform it into a torch tensor
-
+transform = transforms.Compose([transforms.Resize(imsize),
+									transforms.CenterCrop(imsize),
+									transforms.ToTensor(),
+								   ])
 
 def image_loader(image_name):
 	image = Image.open(image_name)
 	# fake batch dimension required to fit network's input dimensions
-	image = loader(image).unsqueeze(0)
+	image = transform(image).unsqueeze(0)
 	return image.to(device, torch.float)
 
 
@@ -48,13 +48,6 @@ def imshow(tensor, title=None):
 	if title is not None:
 		plt.title(title)
 	plt.pause(0.001) # pause a bit so that plots are updated
-
-
-plt.figure()
-imshow(style_img, title='Style Image')
-
-plt.figure()
-imshow(content_img, title='Content Image')
 
 class ContentLoss(nn.Module):
 
@@ -96,8 +89,11 @@ class StyleLoss(nn.Module):
 
 cnn = models.vgg19(pretrained=True).features.to(device).eval()
 
-cnn_normalization_mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
-cnn_normalization_std = torch.tensor([0.229, 0.224, 0.225]).to(device)
+# cnn_normalization_mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
+# cnn_normalization_std = torch.tensor([0.229, 0.224, 0.225]).to(device)
+
+cnn_normalization_mean = torch.tensor([0.5, 0.5, 0.5]).to(device)
+cnn_normalization_std = torch.tensor([0.5, 0.5, 0.5]).to(device)
 
 # create a module to normalize input image so we can easily put it in a
 # nn.Sequential
@@ -113,6 +109,7 @@ class Normalization(nn.Module):
 	def forward(self, img):
 		# normalize img
 		return (img - self.mean) / self.std
+
 
 # desired depth layers to compute style/content losses :
 content_layers_default = ['conv_4']
@@ -183,10 +180,6 @@ input_img = content_img.clone()
 # if you want to use white noise instead uncomment the below line:
 # input_img = torch.randn(content_img.data.size(), device=device)
 
-# add the original input image to the figure:
-plt.figure()
-imshow(input_img, title='Input Image')
-
 def get_input_optimizer(input_img):
 	# this line to show that input is a parameter that requires a gradient
 	optimizer = optim.LBFGS([input_img.requires_grad_()])
@@ -200,7 +193,7 @@ def run_style_transfer(cnn, normalization_mean, normalization_std,
 	model, style_losses, content_losses = get_style_model_and_losses(cnn,
 		normalization_mean, normalization_std, style_img, content_img)
 	optimizer = get_input_optimizer(input_img)
-
+	
 	print('Optimizing..')
 	run = [0]
 	while run[0] <= num_steps:
@@ -241,8 +234,7 @@ def run_style_transfer(cnn, normalization_mean, normalization_std,
 
 	return input_img
 
-output = run_style_transfer(cnn, cnn_normalization_mean, cnn_normalization_std,
-							content_img, style_img, input_img)
+output = run_style_transfer(cnn, cnn_normalization_mean, cnn_normalization_std, content_img, style_img, input_img)
 
 plt.figure()
 imshow(output, title='Output Image')
@@ -250,3 +242,8 @@ imshow(output, title='Output Image')
 # sphinx_gallery_thumbnail_number = 4
 plt.ioff()
 plt.show()
+
+output = output.squeeze(0)      # remove the fake batch dimension
+output = unloader(output)
+# fake_im = transforms.ToPILImage()(output).convert("RGB")
+output.save("test_results/cnn_result.png", "PNG")
