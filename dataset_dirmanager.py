@@ -18,7 +18,7 @@ for f in os.listdir(imagedir):
 
 for painter in painters:
 	# make new directories for each painter
-	painterdir = new_imagedir+"/"+str(painter)
+	painterdir = new_imagedir+"/"+str(painter)+"/train/"
 	if painter not in os.listdir(new_imagedir):
 		os.mkdir(painterdir)
 
