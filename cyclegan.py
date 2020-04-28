@@ -30,6 +30,7 @@ import matplotlib.animation as animation
 import PIL
 import os
 import itertools
+import sys
 
 class Generator(nn.Module):
     """ResNet, but hardcode the layers (in contrast to the real CycleGAN).
@@ -166,7 +167,7 @@ class Options:
 
         self.input_nc = 3       # num channels, usually 3 (RGB)
         self.output_nc = 3      # num channels, usually 3 (RGB)
-        self.num_epochs = 5
+        self.num_epochs = 1
         self.lr = 0.0002        # Learning rate
         self.beta1 = 0.5        # beta1 parameter for the Adam optimizers
 
@@ -270,63 +271,94 @@ class CycleGAN:
         pass
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1 or sys.argv[1] == "train":
+        is_train = True
+    elif sys.argv[1] == "test":
+        is_train = False
     print("This program is still in the making.")
     print("Instantiating CycleGAN clone... ")
-    opt = Options()        # Hardcoded options
-    cycle_gan = CycleGAN(opt, is_train=True)
 
+
+    opt = Options()        # Hardcoded options
+    
     # Image transforms
     transform = transforms.Compose([transforms.Resize(opt.image_size),
-                                    transforms.CenterCrop(opt.image_size),
-                                    transforms.ToTensor(),
-                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                                   ])
+                                transforms.CenterCrop(opt.image_size),
+                                transforms.ToTensor(),
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                               ])
+    if is_train:
+        cycle_gan = CycleGAN(opt, is_train=is_train)
 
-    dataroot_A = f"{os.getcwd()}/data_per_painter/Pablo_Picasso"
-    dataroot_B = f"{os.getcwd()}/data_per_painter/Vincent_van_Gogh"
+        dataroot_A = f"{os.getcwd()}/data_per_painter/Pablo_Picasso"
+        dataroot_B = f"{os.getcwd()}/data_per_painter/Vincent_van_Gogh"
 
-    if os.path.exists(dataroot_A) and os.path.exists(dataroot_B):
-        # Create the datasets
-        dataset_A = dset.ImageFolder(root=dataroot_A, transform=transform)
-        dataset_B = dset.ImageFolder(root=dataroot_B, transform=transform)
+        if os.path.exists(dataroot_A) and os.path.exists(dataroot_B):
+            # Create the datasets
+            dataset_A = dset.ImageFolder(root=dataroot_A, transform=transform)
+            dataset_B = dset.ImageFolder(root=dataroot_B, transform=transform)
 
-        # Create the dataloaders
-        dataloader_A = torch.utils.data.DataLoader(dataset_A, batch_size=opt.batch_size,
-                                                   shuffle=True, num_workers=opt.workers)
-        dataloader_B = torch.utils.data.DataLoader(dataset_B, batch_size=opt.batch_size,
-                                                   shuffle=True, num_workers=opt.workers)
+            # Create the dataloaders
+            dataloader_A = torch.utils.data.DataLoader(dataset_A, batch_size=opt.batch_size,
+                                                       shuffle=True, num_workers=opt.workers)
+            dataloader_B = torch.utils.data.DataLoader(dataset_B, batch_size=opt.batch_size,
+                                                       shuffle=True, num_workers=opt.workers)
+        else:
+            error_cause = dataroot_A if not os.path.exists(dataroot_A) else dataroot_B
+            print("ERROR: " + error_cause + " does not exist or you do not have permission to open this file.")
+            exit()
+
+        fixed_images = dataset_A.__getitem__(0)[0].to(opt.device)
+        fixed_images = torch.reshape(fixed_images, (1, 3, 128, 128))
+        img_list = []   # We'll use this to visualize the progress of the GAN
+        for epoch in range(opt.num_epochs):
+            print("Epoch {} of {}".format(epoch,opt.num_epochs))
+            # Get data from both dataloaders and give it to the cycleGAN
+            for i, data in enumerate(zip(dataloader_A, dataloader_B)):
+                data_A, data_B = data
+                cycle_gan.real_A = data_A[0].to(opt.device)
+                cycle_gan.real_B = data_B[0].to(opt.device)
+                cycle_gan.train()
+                
+            # Visualize the progress of the CycleGAN by saving G_A's output on images from dataset_A
+            with torch.no_grad():
+                fake = cycle_gan.G_A(fixed_images).detach().cpu()
+            grid_of_fakes = vutils.make_grid(fake, padding=2, normalize=True)
+            img_list.append(grid_of_fakes)
+
+
+        # Save the last grid image made to a png file
+        fake_im = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
+        fake_im.save("test_results/latest_test_result.png", "PNG")
+
+        # Make animation of grid images
+        fig = plt.figure(figsize=(8, 8))
+        plt.axis("off")
+        ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
+        ani = animation.ArtistAnimation(fig, ims, interval=500, repeat_delay=500, blit=True)
+        plt.show()
+        print("Training finished without errors!")
+        torch.save(cycle_gan.G_A,"gen_A.pt")
+        torch.save(cycle_gan.G_B,"gen_B.pt")
+    
     else:
-        error_cause = dataroot_A if not os.path.exists(dataroot_A) else dataroot_B
-        print("ERROR: " + error_cause + " does not exist or you do not have permission to open this file.")
-        exit()
+        if sys.argv[2] == "a":
+            model = torch.load("gen_A.pt")
+        elif sys.argv[2] == "b":
+            model = torch.load("gen_B.pt")
+        else:
+            print("Specify model as argument")
+            exit(0)
 
-    fixed_images = dataset_A.__getitem__(0)[0].to(opt.device)
-    fixed_images = torch.reshape(fixed_images, (1, 3, 128, 128))
-    img_list = []   # We'll use this to visualize the progress of the GAN
-    for epoch in range(opt.num_epochs):
-        print("Epoch {} of {}".format(epoch,opt.num_epochs))
-        # Get data from both dataloaders and give it to the cycleGAN
-        for i, data in enumerate(zip(dataloader_A, dataloader_B)):
-            data_A, data_B = data
-            cycle_gan.real_A = data_A[0].to(opt.device)
-            cycle_gan.real_B = data_B[0].to(opt.device)
-            cycle_gan.train()
-            
-        # Visualize the progress of the CycleGAN by saving G_A's output on images from dataset_A
-        with torch.no_grad():
-            fake = cycle_gan.G_A(fixed_images).detach().cpu()
-        grid_of_fakes = vutils.make_grid(fake, padding=2, normalize=True)
-        img_list.append(grid_of_fakes)
+        original_img = PIL.Image.open("./cnn_data/dancing.jpg")
+        original_img = transform(original_img)
+        original_img = torch.reshape(original_img,(1, 3, 128, 128))
+
+        new_img = model(original_img).detach().cpu()
+        grid_of_fakes = vutils.make_grid(new_img, padding=2, normalize=True)
+
+        new_img = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
+
+        new_img.save("test_results/test_img.png", "PNG")
 
 
-    # Save the last grid image made to a png file
-    fake_im = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
-    fake_im.save("test_results/latest_test_result.png", "PNG")
-
-    # Make animation of grid images
-    fig = plt.figure(figsize=(8, 8))
-    plt.axis("off")
-    ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
-    ani = animation.ArtistAnimation(fig, ims, interval=500, repeat_delay=500, blit=True)
-    plt.show()
-    print("Program finished without errors!")
