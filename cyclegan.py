@@ -31,6 +31,7 @@ import PIL
 import os
 import itertools
 import sys
+import pprint
 
 class Generator(nn.Module):
     """ResNet, but hardcode the layers (in contrast to the real CycleGAN).
@@ -162,23 +163,19 @@ class Options:
     """A class that keeps track of all user-defined options"""
     def __init__(self):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.device = "cpu"
-        print("Keep in mind! Options.device is now cpu by default, as cuda results in OOM error.")
 
         self.input_nc = 3       # num channels, usually 3 (RGB)
         self.output_nc = 3      # num channels, usually 3 (RGB)
-        self.num_epochs = 1
+        self.num_epochs = 10
         self.lr = 0.0002        # Learning rate
         self.beta1 = 0.5        # beta1 parameter for the Adam optimizers
 
         # lambda parameter (how much more important 
         #is the cycle-consistency loss compared to the normal GAN loss)
         self.lambda_ = 10       
-
-
         self.workers = 2        # Number of workers for dataloader
         self.batch_size = 1    # Batch size during training
-        self.image_size = 128   # Spatial size of training images.
+        self.image_size = 192   # Spatial size of training images.
 
 
 class CycleGAN:
@@ -280,7 +277,9 @@ if __name__ == "__main__":
 
 
     opt = Options()        # Hardcoded options
-    
+    pp = pprint.PrettyPrinter(indent=4)
+    pp.pprint(opt.__dict__) # Pretty print the options for the user
+
     # Image transforms
     transform = transforms.Compose([transforms.Resize(opt.image_size),
                                 transforms.CenterCrop(opt.image_size),
@@ -309,17 +308,18 @@ if __name__ == "__main__":
             exit()
 
         fixed_images = dataset_A.__getitem__(0)[0].to(opt.device)
-        fixed_images = torch.reshape(fixed_images, (1, 3, 128, 128))
+        fixed_images = torch.reshape(fixed_images, (1, opt.input_nc, opt.image_size, opt.image_size))
         img_list = []   # We'll use this to visualize the progress of the GAN
         for epoch in range(opt.num_epochs):
-            print("Epoch {} of {}".format(epoch,opt.num_epochs))
+            print("Epoch {} of {}               ".format(epoch, opt.num_epochs))
             # Get data from both dataloaders and give it to the cycleGAN
             for i, data in enumerate(zip(dataloader_A, dataloader_B)):
+                print(f"Iteration: {i} of {min(len(dataloader_A), len(dataloader_B))}", end="\r")
                 data_A, data_B = data
                 cycle_gan.real_A = data_A[0].to(opt.device)
                 cycle_gan.real_B = data_B[0].to(opt.device)
                 cycle_gan.train()
-                
+
             # Visualize the progress of the CycleGAN by saving G_A's output on images from dataset_A
             with torch.no_grad():
                 fake = cycle_gan.G_A(fixed_images).detach().cpu()
@@ -335,7 +335,7 @@ if __name__ == "__main__":
         fig = plt.figure(figsize=(8, 8))
         plt.axis("off")
         ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
-        ani = animation.ArtistAnimation(fig, ims, interval=500, repeat_delay=500, blit=True)
+        ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
         plt.show()
         print("Training finished without errors!")
         torch.save(cycle_gan.G_A,"gen_A.pt")
