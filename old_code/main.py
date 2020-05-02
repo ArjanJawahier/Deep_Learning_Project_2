@@ -32,7 +32,7 @@ torch.manual_seed(0)
 
 # Tuning parameters (as described in the tutorial)
 # Root directory for dataset
-dataroot = "data_per_painter/Vincent_van_Gogh"
+dataroot = "../data_per_painter/Vincent_van_Gogh"
 
 # Number of workers for dataloader
 workers = 2
@@ -99,18 +99,19 @@ if (device.type == 'cuda') and (ngpu > 1):
 #  to mean=0, stdev=0.2.
 netG.apply(weights_init)
 
-# Create the Discriminator
-netD = disc.Discriminator(ngpu, ndf, nc).to(device)
-# Handle multi-gpu if desired
-if (device.type == 'cuda') and (ngpu > 1):
-    netD = nn.DataParallel(netD, list(range(ngpu)))
+# # Create the Discriminator
+print("NOT CREATING DISCRIMINATOR!!!")
+# netD = disc.Discriminator(ngpu, ndf, nc).to(device)
+# # Handle multi-gpu if desired
+# if (device.type == 'cuda') and (ngpu > 1):
+#     netD = nn.DataParallel(netD, list(range(ngpu)))
 # Apply the weights_init function to randomly initialize all weights
 #  to mean=0, stdev=0.2.
-netD.apply(weights_init)
+# netD.apply(weights_init)
 
 # Print the models
 print(netG)
-print(netD)
+# print(netD)
 
 # Initialize BCELoss function
 loss_func = nn.BCELoss()
@@ -118,7 +119,10 @@ loss_func = nn.BCELoss()
 # Create batch of latent vectors that we will use to visualize
 #  the progression of the generator
 fixed_noise = torch.randn(image_size, nz, 1, 1, device=device)
-
+fake = netG(fixed_noise).detach().cpu()
+print(fake.shape)
+grid_of_fakes = vutils.make_grid(fake, padding=2, normalize=True)
+exit()
 # fixed_noise_image = transforms.ToPILImage()(fixed_noise.cpu().reshape(64, 64, 1)).convert("RGB")
 # fixed_noise_image.show()
 
@@ -211,6 +215,7 @@ for epoch in range(num_epochs):
             print(i, len(dataloader))
             with torch.no_grad():
                 fake = netG(fixed_noise).detach().cpu()
+                print(fake.shape)
             grid_of_fakes = vutils.make_grid(fake, padding=2, normalize=True)
             img_list.append(grid_of_fakes)
 

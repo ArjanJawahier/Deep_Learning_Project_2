@@ -3,10 +3,11 @@
 ## PyTorch implementation: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/
 ## CycleGAN paper: https://arxiv.org/pdf/1703.10593.pdf
 
-# Todo-list:
-# 1) Figure out how to combine data from both dataloaders. Have a look at the CustomDataLoader of the authors
-# 2) Compute loss with cycle consistency term + normal GAN loss, see paper!
-# 3) Figure out how to test.
+## TODO-list:
+#1) Make image result comparisons
+#2) Test different lambdas
+#3) Test weight initialization
+#4) Test identity loss
 
 # Program:
 # Load in dataset
@@ -32,6 +33,7 @@ import os
 import itertools
 import sys
 import pprint
+
 import util
 
 class Generator(nn.Module):
@@ -173,12 +175,12 @@ class Options:
 
         # lambda parameter (how much more important 
         #is the cycle-consistency loss compared to the normal GAN loss)
-        self.lambdas = [1, 100, 10]     # list of Lambdas tested
-        self.lambda_ = 1        # Current lambda
+        self.lambdas = [10]     # list of Lambdas tested
+        self.lambda_ = 10      # Current lambda
         self.workers = 2        # Number of workers for dataloader
         self.batch_size = 1    # Batch size during training
         self.image_size = 192   # Spatial size of training images.
-
+        self.use_identity_loss = True
 
 class CycleGAN:
     def __init__(self, opt, is_train):
@@ -201,7 +203,10 @@ class CycleGAN:
             # Only need losses during training time
             self.criterionLSGAN = LSGANLoss().to(self.device) # TODO: see why .to(self.device) does not work)
             self.criterionCycle = nn.L1Loss()   # Cycle-consistency loss, see paper!
+
             # TODO?: might want to test out identity loss as well.
+            if self.opt.use_identity_loss:
+                self.criterion_identity = nn.L1Loss()
 
             self.optimizer_G = optim.Adam(itertools.chain(self.G_A.parameters(), self.G_B.parameters()),
                                           lr=self.opt.lr, betas=(self.opt.beta1, 0.999))
@@ -226,6 +231,13 @@ class CycleGAN:
         cycleloss_A = self.criterionCycle(self.reconstructed_A, self.real_A) * lambda_  # Forward cycle loss || G_B(G_A(A)) - A||
         cycleloss_B = self.criterionCycle(self.reconstructed_B, self.real_B) * lambda_  # Backward cycle loss || G_A(G_B(B)) - B||
         loss_G = LSGANloss_A + LSGANloss_B + cycleloss_A + cycleloss_B     # combined loss and calculate gradients
+
+        if self.opt.use_identity_loss:
+            identity_loss_A = self.criterion_identity(self.G_A(self.real_B), self.real_B)
+            identity_loss_B = self.criterion_identity(self.G_B(self.real_A), self.real_A)
+            loss_G += identity_loss_A
+            loss_G += identity_loss_B
+
         loss_G.backward()
         self.optimizer_G.step()       # update G_A and G_B's weights
 
@@ -247,7 +259,7 @@ class CycleGAN:
         D_B_pred_fake = self.D_B(self.fake_A.detach())
         loss_D_B_fake = self.criterionLSGAN(D_B_pred_fake, False)
         loss_D_B = (loss_D_B_real + loss_D_B_fake) * 0.5
-        loss_D_B.backward() # TODO: find out why you can use backward twice here. Isn't the gradient wrong?
+        loss_D_B.backward()
 
         self.optimizer_D.step()  # update D_A and D_B's weights
         
@@ -348,25 +360,8 @@ if __name__ == "__main__":
             print(f"Training with (lambda: {lambda_}) finished without errors!")
     else:
         modelpath = f"{os.getcwd()}/{sys.argv[2]}"
-        if os.path.exists(modelpath):
-            model = torch.load(modelpath)
-        else:
-            print(f"File {modelpath} not found or unable to open")
-            exit()
-
-        try:
-            original_img = PIL.Image.open(f"{os.getcwd()}/{sys.argv[3]}")
-        except:
-            print("File not found or unable to open")
-            exit(0)
-
-        original_img = transform(original_img).to(opt.device)
-        original_img = torch.reshape(original_img, (1, opt.input_nc, opt.image_size, opt.image_size))
-
-        new_img = model(original_img).detach().cpu()
-        grid_of_fakes = vutils.make_grid(new_img, padding=2, normalize=True)
-
-        new_img = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
-        new_img.save("test_results/test_img.png", "PNG")
+        input_image_filepath = f"{os.getcwd()}/{sys.argv[3]}"
+        new_img = util.create_result_image(modelpath, input_image_filepath, transform)
+        new_img.save("test_results/test_img.jpg", "JPEG")
 
 
