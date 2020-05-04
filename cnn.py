@@ -16,7 +16,7 @@ import copy
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # desired size of the output image
-imsize = 128
+imsize = 192
 
 transform = transforms.Compose([transforms.Resize(imsize),
 									transforms.CenterCrop(imsize),
