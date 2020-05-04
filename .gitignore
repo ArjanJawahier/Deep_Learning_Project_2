@@ -6,5 +6,8 @@ data_per_painter
 # Figures
 Figures/*
 
+# Generators (too big to upload)
+generators
+
 # pycache
 __pycache__
