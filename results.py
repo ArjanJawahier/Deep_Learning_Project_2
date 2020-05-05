@@ -23,26 +23,27 @@ def generate_result_image(subfolder):
                                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                       ])
 
-    generators_list = ["G_A_5e_0lambda.pt",
-                      "G_A_10e_0lambda.pt",
-                      "G_A_15e_0lambda.pt",
-                      "G_A_20e_0lambda.pt",
-                      "G_A_25e_0lambda.pt",
-                      "G_A_5e_1lambda.pt",
-                      "G_A_10e_1lambda.pt",
-                      "G_A_15e_1lambda.pt",
-                      "G_A_20e_1lambda.pt",
-                      "G_A_25e_1lambda.pt",
-                      "G_A_5e_10lambda.pt",
+    generators_list = ["G_A_5e_10lambda.pt",
                       "G_A_10e_10lambda.pt",
                       "G_A_15e_10lambda.pt",
                       "G_A_20e_10lambda.pt",
                       "G_A_25e_10lambda.pt",
-                      "G_A_5e_100lambda.pt",
-                      "G_A_10e_100lambda.pt",
-                      "G_A_15e_100lambda.pt",
-                      "G_A_20e_100lambda.pt",
-                      "G_A_25e_100lambda.pt"]
+                      "G_A_30e_10lambda.pt",
+                      "G_A_35e_10lambda.pt",
+                      "G_A_40e_10lambda.pt",
+                      "G_A_45e_10lambda.pt",
+                      "G_A_50e_10lambda.pt",
+                      "G_A_55e_10lambda.pt",
+                      "G_A_60e_10lambda.pt",
+                      "G_A_65e_10lambda.pt",
+                      "G_A_70e_10lambda.pt",
+                      "G_A_75e_10lambda.pt",
+                      "G_A_80e_10lambda.pt",
+                      "G_A_85e_10lambda.pt",
+                      "G_A_90e_10lambda.pt",
+                      "G_A_95e_10lambda.pt",
+                      "G_A_100e_10lambda.pt"
+                      ]
 
     img_list = []
     for i, g in enumerate(generators_list):

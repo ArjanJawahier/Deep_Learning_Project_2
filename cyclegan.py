@@ -169,7 +169,7 @@ class Options:
 
         self.input_nc = 3       # num channels, usually 3 (RGB)
         self.output_nc = 3      # num channels, usually 3 (RGB)
-        self.num_epochs = 25
+        self.num_epochs = 100
         self.lr = 0.0002        # Learning rate
         self.beta1 = 0.5        # beta1 parameter for the Adam optimizers
 
@@ -180,7 +180,7 @@ class Options:
         self.workers = 2        # Number of workers for dataloader
         self.batch_size = 1    # Batch size during training
         self.image_size = 192   # Spatial size of training images.
-        self.use_identity_loss = True
+        self.use_identity_loss = False
 
 class CycleGAN:
     def __init__(self, opt, is_train):
