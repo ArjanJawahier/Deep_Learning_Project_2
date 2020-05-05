@@ -53,7 +53,7 @@ To run the program we'll first need to download the dataset.
 | use_identity_loss | true   |                                         |
 
 6. Wait until the algorithm is finished.
-7. Run the algorithm results.py to create an image of the results: `python results.py`.
+7. Run the algorithm results.py to create an image of the latest created generators: `python results.py`.
 8. The results can be found in the folder `generators`.
 
 <!-- ## Discriminator

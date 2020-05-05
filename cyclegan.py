@@ -169,7 +169,7 @@ class Options:
 
         self.input_nc = 3       # num channels, usually 3 (RGB)
         self.output_nc = 3      # num channels, usually 3 (RGB)
-        self.num_epochs = 25
+        self.num_epochs = 5
         self.lr = 0.0002        # Learning rate
         self.beta1 = 0.5        # beta1 parameter for the Adam optimizers
 
@@ -283,6 +283,9 @@ class CycleGAN:
 
 # TODO refactor this or make a new file with this whole thing
 if __name__ == "__main__":
+
+    amount_of_runs_before = len(next(os.walk('generators')))
+    os.mkdir("generators/"+ str(amount_of_runs_before))
     is_train = util.deal_with_argv(sys.argv)
     util.make_generators_dir()
 
@@ -351,8 +354,8 @@ if __name__ == "__main__":
                 # Save the generators in the generators directory every 5 epochs
                 # Be sure to save the epoch number and lambda as well (filename)
                 if (epoch+1) % 5 == 0:
-                    torch.save(cycle_gan.G_A,f"generators/G_A_{epoch+1}e_{lambda_}lambda.pt")
-                    torch.save(cycle_gan.G_B,f"generators/G_B_{epoch+1}e_{lambda_}lambda.pt")
+                    torch.save(cycle_gan.G_A,f"generators/{amount_of_runs_before}/G_A_{epoch+1}e_{lambda_}lambda.pt")
+                    torch.save(cycle_gan.G_B,f"generators/{amount_of_runs_before}/G_B_{epoch+1}e_{lambda_}lambda.pt")
 
             # Save the last grid image made to a png file
             fake_im = transforms.ToPILImage()(grid_of_fakes).convert("RGB")
