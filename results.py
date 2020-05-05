@@ -26,27 +26,6 @@ def generate_result_image(subfolder):
                                       ])
 
     generators_list = [f for f in listdir(generators_dir) if isfile(join(generators_dir, f))]
-    print(generators_list)
-    # generators_list = ["G_A_5e_0lambda.pt",
-    #                   "G_A_10e_0lambda.pt",
-    #                   "G_A_15e_0lambda.pt",
-    #                   "G_A_20e_0lambda.pt",
-    #                   "G_A_25e_0lambda.pt",
-    #                   "G_A_5e_1lambda.pt",
-    #                   "G_A_10e_1lambda.pt",
-    #                   "G_A_15e_1lambda.pt",
-    #                   "G_A_20e_1lambda.pt",
-    #                   "G_A_25e_1lambda.pt",
-    #                   "G_A_5e_10lambda.pt",
-    #                   "G_A_10e_10lambda.pt",
-    #                   "G_A_15e_10lambda.pt",
-    #                   "G_A_20e_10lambda.pt",
-    #                   "G_A_25e_10lambda.pt",
-    #                   "G_A_5e_100lambda.pt",
-    #                   "G_A_10e_100lambda.pt",
-    #                   "G_A_15e_100lambda.pt",
-    #                   "G_A_20e_100lambda.pt",
-    #                   "G_A_25e_100lambda.pt"]
 
     img_list = []
     for i, g in enumerate(generators_list):
