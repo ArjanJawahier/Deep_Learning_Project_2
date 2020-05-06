@@ -285,7 +285,7 @@ class CycleGAN:
 if __name__ == "__main__":
 
     amount_of_runs_before = len(next(os.walk('generators')))
-    os.mkdir("generators/"+ str(amount_of_runs_before))
+    os.mkdir("generators/"+ str(amount_of_runs_before + 1))
     is_train = util.deal_with_argv(sys.argv)
     util.make_generators_dir()
 
