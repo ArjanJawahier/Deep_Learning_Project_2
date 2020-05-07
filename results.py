@@ -3,6 +3,7 @@
 import os
 from os import listdir
 from os.path import isfile, join
+from pathlib import Path
 import PIL
 import torch
 from torchvision.utils import make_grid
@@ -25,11 +26,10 @@ def generate_result_image(subfolder):
                                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                       ])
 
-    generators_list = [f for f in listdir(generators_dir) if isfile(join(generators_dir, f))]
+    generators_list = sorted(Path(generators_dir).iterdir(), key=os.path.getmtime)
 
     img_list = []
-    for i, g in enumerate(generators_list):
-        g_filepath = generators_dir + "/" + g
+    for g_filepath in generators_list:
         im = util.create_result_image(g_filepath, im_filepath, im_transform, return_tensor=True)
         im = im.squeeze()
         img_list.append(im)
@@ -41,4 +41,4 @@ def generate_result_image(subfolder):
 
 if __name__ == "__main__":
     amount_of_runs_before = len(next(os.walk('generators')))
-    generate_result_image(str(amount_of_runs_before))
+    generate_result_image("2")
